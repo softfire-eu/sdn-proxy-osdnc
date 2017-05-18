@@ -2,10 +2,12 @@
 <head>
     <!-- link rel="stylesheet" href="http://caldwell.github.io/renderjson/assets/css/style.css" -->
     <style>
-        .renderjson a              { text-decoration: none; }
-        pre {padding: 20px;overflow: auto;color: #f2f2f2;text-shadow: none;background: #303030;}
-        pre code { padding: 0; color: #f2f2f2; background-color: #303030; border: none; }
-        .highlight, .highlight { color: #d0d0d0; }
+        .highlight { color: #d0d0d0; }
+
+        .renderjson pre {padding: 20px;overflow: auto;color: #f2f2f2;text-shadow: none;background: #303030;}
+        .renderjson pre code { padding: 0; color: #f2f2f2; background-color: #303030; border: none; }
+
+        .renderjson a              { text-decoration: none; color: #d0d0d0; }
         .renderjson .disclosure    { color: crimson; font-size: 100%; }
         .renderjson .syntax        { color: grey; }
         .renderjson .string        { color: red; }
@@ -15,6 +17,7 @@
         .renderjson .keyword       { color: lightgoldenrodyellow; }
         .renderjson .object.syntax { color: lightseagreen; }
         .renderjson .array.syntax  { color: lightsalmon; }
+        .foo { padding: 5px; background-color: #808080; border: none; }
     </style>
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7/jquery.js"></script>
     <script src="http://malsup.github.com/jquery.form.js"></script>
@@ -25,29 +28,45 @@
 
         });</script>
 </head>
-<body>Welcome to Phoenix 1.0! If you got here, you might not know how this works... No problem, we'll teach you!<hr>
-To send JSON-RPC commands, set the Content-Type to "application/json" and then POST the command. You'll get the responses in the HTTP response body.<hr>
- JSON-RPC easy test:<br>
+<body>
+<h1>Welcome to SoftFIRE!</h1>
+This is the <b>OpenSDNCore Controller</b> interface of the Fraunhofer FOKUS testbed!
+
+<hr/>
+<h3>Usage</h3>
+To send JSON-RPC commands, set the Content-Type to "application/json" and Add the correct API-Token header value, then POST the command.<br/>
+You'll get the responses in the HTTP response body.
+
+<pre class="foo">curl -v -X POST -H "Content-Type: application/json-rpc" -H "API-Token: xyz" \
+    -d '{"jsonrpc": "2.0", "method": "list.methods", "params":[ ], "id": 1}' \
+    http://localhost:8001/api
+</pre>
+<hr>
+<b>JSON-RPC console:</b><br>
 <table border="0">
-  <tr><td>Request(s):</td><td> <textarea rows="4" cols="100" id="json_request" >{"jsonrpc": "2.0", "method": "list.methods", "params":[ ], "id": 1}</textarea></td></tr>
-  <tr><td colspan="2">
-  <input type="button" value="POST" onClick='
-		$.ajax({
-         url: "/api",
-         type: "POST",
-		 data: document.getElementById("json_request").value,
-		 dataType: "json",
-         contentType: "application/json",
-         success: function(result) {
-                document.getElementById("json_response").value=JSON.stringify(result,null,4);
-                document.getElementById("result2").appendChild(renderjson(result));
-            }
-        });
-	'/>
- <tr>
-    <td>Result(s):</td>
-    <td><textarea rows="8" cols="100" id="json_response" ></textarea><br><div class="highlight" id='result2'></div></td>
-</tr>
+    <tr><td>Request(s):</td><td> <textarea rows="4" cols="100" id="json_request" >{"jsonrpc": "2.0", "method": "list.methods", "params":[ ], "id": 1}</textarea></td></tr>
+    <tr><td>API-Token:</td><td><input type="text" value="xyz" id="api-token"/>
+        <input type="button" value="POST" onClick='
+            $.ajax({
+             url: "/api",
+             type: "POST",
+             headers: { "API-Token": document.getElementById("api-token").value },
+             data: document.getElementById("json_request").value,
+             dataType: "json",
+             contentType: "application/json",
+             success: function(result) {
+                    document.getElementById("json_response").value=JSON.stringify(result,null,4);
+                    document.getElementById("result2").appendChild(renderjson(result));
+                }
+            });
+        '/></td>
+    </tr>
+    <tr>
+        <td>Result(s):</td>
+        <td><textarea rows="8" cols="100" id="json_response" ></textarea><br>
+            <div class="renderjson" id='result2'></div>
+        </td>
+    </tr>
  </table>
 <hr>
 </body></html>

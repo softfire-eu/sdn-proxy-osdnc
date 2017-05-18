@@ -122,12 +122,29 @@ def delete_handler(token):
 def index():
     return bottle.static_file('index.html', os.getcwd())
 
+@route('/favicon.ico', method="GET")
+def index():
+    return bottle.static_file('favicon.ico', os.getcwd())
+
 @post('/api')
 def do_proxy_jsonrpc():
-    logger.debug("JSONRCP: request.")
-    dataj=json.loads(request.body.read().decode("utf-8"))
-    logger.debug("data %s"% dataj)
-    request_id = dataj.get('id')
+
+    response.headers['Content-Type'] = 'application/json'
+    try:
+        dataj=json.loads(request.body.read().decode("utf-8"))
+        #logger.debug("data %s" % dataj)
+        request_id = dataj.get('id')
+    except AttributeError as ate:
+        logger.debug("Invalid Request")
+        return make_jsonrpc_error(None, -32600, "Invalid Request")
+    except Exception as e:
+        logger.debug("JSON parsing error: %s" % e)
+        return make_jsonrpc_error(None, -32700, "Parse error")
+
+    if request_id is None:
+        logger.debug("JSON request ID missing")
+        return make_jsonrpc_error(None, -32600, "Invalid Request")
+
     token = request.headers.get('API-Token')
 
     if do_filter_jsonrpc_request(token, dataj):
@@ -143,16 +160,13 @@ def do_proxy_jsonrpc():
                 return "500 Internal error parsing the response from OpenSDNcore!"
         else:
             logger.debug("OpenSDNcore returned no json! heders: %s" % r.headers)
-            response.headers['Content-Type'] = 'application/json'
-            return make_jsonrpc_error(request_id, -32600, "Invalid Request")
+            return make_jsonrpc_error(request_id, -32603, "Internal error: Invalid response from upstream server")
 
         logger.debug("Result from OpenSDNcore: %s" % resj)
         response.status = r.status_code
         return resj
     else:
-        #response.status = 403
-        #return "403 Request not allowed!"
-        return make_jsonrpc_error(request_id, -32643, "Method not allowed or Token missing")
+        return make_jsonrpc_error(request_id, -32643, "Method not allowed or Token missing/invalid")
 
 
 def do_filter_jsonrpc_request(token, data):
@@ -179,7 +193,7 @@ def do_filter_jsonrpc_request(token, data):
 
 
 def start():
-    #_experiments["test01"]= {"tenant": 123, "username": "admin"}
+    _experiments["test01"]=  {"tenant": "123invalid456", "flow_tables": 300}
     logger.info("starting up")
     bottle.debug(True)
-    bottle.run(host = '127.0.0.1', port = 8001, reloader=True)
+    bottle.run(host = '0.0.0.0', port = 8001, reloader=True)
