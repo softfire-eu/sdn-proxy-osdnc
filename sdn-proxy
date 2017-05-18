@@ -1,0 +1,4 @@
+#!/bin/sh
+export PYTHONPATH=./src 
+
+python src/osdn_proxy.py $*
