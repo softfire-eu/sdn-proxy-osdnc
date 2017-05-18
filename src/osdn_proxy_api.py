@@ -150,9 +150,9 @@ def do_proxy_jsonrpc():
         response.status = r.status_code
         return resj
     else:
-        response.status = 403
+        #response.status = 403
         #return "403 Request not allowed!"
-        return make_jsonrpc_error(request_id, -32643, "Method not allowed")
+        return make_jsonrpc_error(request_id, -32643, "Method not allowed or Token missing")
 
 
 def do_filter_jsonrpc_request(token, data):
