@@ -127,7 +127,8 @@ def index():
     return bottle.static_file('favicon.ico', os.getcwd())
 
 @post('/api')
-def do_proxy_jsonrpc():
+@post('/api/<urltoken>')
+def do_proxy_jsonrpc(urltoken=None):
 
     response.headers['Content-Type'] = 'application/json'
     try:
@@ -145,7 +146,7 @@ def do_proxy_jsonrpc():
         logger.debug("JSON request ID missing")
         return make_jsonrpc_error(None, -32600, "Invalid Request")
 
-    token = request.headers.get('API-Token')
+    token = request.headers.get('API-Token',urltoken)
 
     if do_filter_jsonrpc_request(token, dataj):
         r = requests.post(_osdnc_api, data=bottle.request.body, headers={'Content-Type': 'application/json-rpc'})
@@ -184,7 +185,7 @@ def do_filter_jsonrpc_request(token, data):
     logger.debug("data: %s"%data)
     method = data.get("method")
 
-    logger.debug("MEthod: %s"%method)
+    logger.debug("Method: %s"%method)
 
     if method is not None and method in allowed_methods:
         return True

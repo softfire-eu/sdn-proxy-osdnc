@@ -22,11 +22,23 @@
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7/jquery.js"></script>
     <script src="http://malsup.github.com/jquery.form.js"></script>
     <script type="text/javascript" src="http://caldwell.github.io/renderjson/renderjson.js"></script>
-    <script>$(document).ready(function() {$('#myForm').ajaxForm(function() {
-                alert("Thank you for your comment!");
-            });
+    <script>
+    OSDNC = {
+        updateExample: function (token, url, jsonrpc) {
+            exstr = 'curl -v -X POST -H "Content-Type: application/json-rpc" -H "API-Token: ' + token + '" \\ <br/>'
+            exstr += '\t-d \'' + jsonrpc + '\' \\<br/>\t' + url;
 
-        });</script>
+            document.getElementById("curl_example").innerHTML = exstr;
+        },
+        showResultTextbox: function (result){
+            document.getElementById("json_response").value=JSON.stringify(result,null,4);
+        },
+        addResultHistory: function (request, result){
+            item = {"timestamp": (new Date).toISOString().replace(/z|t/gi,' ').trim(), "request": request, "response": result}
+            document.getElementById("result2").appendChild(renderjson.set_show_to_level(1).set_icons('+', '-')(item));
+        }
+    }
+    </script>
 </head>
 <body>
 <h1>Welcome to SoftFIRE!</h1>
@@ -37,7 +49,7 @@ This is the <b>OpenSDNCore Controller</b> interface of the Fraunhofer FOKUS test
 To send JSON-RPC commands, set the Content-Type to "application/json" and Add the correct API-Token header value, then POST the command.<br/>
 You'll get the responses in the HTTP response body.
 
-<pre class="foo">curl -v -X POST -H "Content-Type: application/json-rpc" -H "API-Token: xyz" \
+<pre class="foo" id="curl_example">curl -v -X POST -H "Content-Type: application/json-rpc" -H "API-Token: xyz" \
     -d '{"jsonrpc": "2.0", "method": "list.methods", "params":[ ], "id": 1}' \
     http://localhost:8001/api
 </pre>
@@ -47,16 +59,20 @@ You'll get the responses in the HTTP response body.
     <tr><td>Request(s):</td><td> <textarea rows="4" cols="100" id="json_request" >{"jsonrpc": "2.0", "method": "list.methods", "params":[ ], "id": 1}</textarea></td></tr>
     <tr><td>API-Token:</td><td><input type="text" value="xyz" id="api-token"/>
         <input type="button" value="POST" onClick='
+            var token=document.getElementById("api-token").value;
+            var jsondata=document.getElementById("json_request").value;
             $.ajax({
              url: "/api",
              type: "POST",
-             headers: { "API-Token": document.getElementById("api-token").value },
-             data: document.getElementById("json_request").value,
+             headers: { "API-Token": token },
+             data: jsondata,
              dataType: "json",
              contentType: "application/json",
              success: function(result) {
-                    document.getElementById("json_response").value=JSON.stringify(result,null,4);
-                    document.getElementById("result2").appendChild(renderjson(result));
+                    request = JSON.parse(jsondata);
+                    OSDNC.addResultHistory(request, result);
+                    OSDNC.showResultTextbox(result);
+                    OSDNC.updateExample(token,window.location+"api",jsondata);
                 }
             });
         '/></td>
@@ -70,4 +86,3 @@ You'll get the responses in the HTTP response body.
  </table>
 <hr>
 </body></html>
-
