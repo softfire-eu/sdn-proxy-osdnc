@@ -25,8 +25,9 @@
     <script>
     OSDNC = {
         updateExample: function (token, url, jsonrpc) {
-            exstr = 'curl -v -X POST -H "Content-Type: application/json-rpc" -H "API-Token: ' + token + '" \\ <br/>'
-            exstr += '\t-d \'' + jsonrpc + '\' \\<br/>\t' + url;
+            xjs = JSON.stringify(JSON.parse(jsonrpc))
+            exstr = 'curl -v -X POST -H "Content-Type: application/json-rpc" -H "API-Token: ' + token + '" \\<br/>'
+            exstr += '\t-d \'' + xjs + '\' \\<br/>\t' + url;
 
             document.getElementById("curl_example").innerHTML = exstr;
         },

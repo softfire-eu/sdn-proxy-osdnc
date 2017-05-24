@@ -8,26 +8,34 @@ import os
 import requests
 from bottle import request, response
 from bottle import post, get, put, delete, route
+
+from SdnFilter import SdnFilter, OpenSdnCoreFilter, WhitelistFilter
+from osdn_exceptions import JsonRpcParseError, JsonRpcInvalidRequest, JsonRpcError, JsonRpcServerError, \
+    JsonRpcInternalError
 from utils import get_config, get_logger, make_jsonrpc_error
 
 logger = get_logger(__name__)
-
 
 _experiments = dict()
 _auth_secret = "90d82936f887a871df8cc82c1518a43e"
 _api_endpoint = "http://127.0.0.1:8001/"
 _osdnc_api = "http://192.168.41.153:10010/"
+_SdnFilter = SdnFilter()
+
+
 
 def check_auth_header(headers):
     if "Auth-Secret" in headers.keys():
         auth_secret = headers.get("Auth-Secret")
-        logger.debug("'Auth-Secret' header present! value: %s" %auth_secret)
+        logger.debug("'Auth-Secret' header present! value: %s" % auth_secret)
         if auth_secret == _auth_secret:
             return True
     return False
 
+
 def get_user_flowtables(tenant_id):
     return list(range(11, 21))
+
 
 @post('/SDNproxySetup')
 def proxy_creation_handler():
@@ -68,7 +76,8 @@ def proxy_creation_handler():
 
         response.headers['Content-Type'] = 'application/json'
         response.headers['Cache-Control'] = 'no-cache'
-        return json.dumps( {"user-flow-tables":_experiments[experiment_id]["flow_tables"], "endpoint_url": _api_endpoint } )
+        return json.dumps(
+            {"user-flow-tables": _experiments[experiment_id]["flow_tables"], "endpoint_url": _api_endpoint})
 
     except:
         response.status = 500
@@ -79,7 +88,7 @@ def proxy_listing_handler():
     '''Handles name listing'''
     response.headers['Content-Type'] = 'application/json'
     response.headers['Cache-Control'] = 'no-cache'
-    #return json.dumps(list(request.headers.items()))
+    # return json.dumps(list(request.headers.items()))
     return json.dumps(_experiments)
 
 
@@ -98,6 +107,7 @@ def proxy_details_handler(token):
         response.status = 403
         return "Auth-Secret error!"
 
+
 @delete('/SDNproxy/<token>')
 def delete_handler(token):
     '''delete the mapping between experiment-token and tenant id
@@ -109,7 +119,7 @@ def delete_handler(token):
             msg = "Experiment not found!"
         else:
             response.status = 200
-            msg = "Experiment sccesfully deleted!"
+            msg = "Experiment successfully deleted!"
         logger.debug(msg)
         response.headers['Content-Type'] = 'application/json'
         return json.dumps({"msg": msg})
@@ -118,60 +128,74 @@ def delete_handler(token):
         response.status = 403
         return "Auth-Secret error!"
 
+
 @route('/', method="GET")
 def index():
     return bottle.static_file('index.html', os.getcwd())
+
 
 @route('/favicon.ico', method="GET")
 def index():
     return bottle.static_file('favicon.ico', os.getcwd())
 
+
 @post('/api')
 @post('/api/<urltoken>')
 def do_proxy_jsonrpc(urltoken=None):
-
-    response.headers['Content-Type'] = 'application/json'
     try:
-        dataj=json.loads(request.body.read().decode("utf-8"))
-        #logger.debug("data %s" % dataj)
-        request_id = dataj.get('id')
-    except AttributeError as ate:
-        logger.debug("Invalid Request")
-        return make_jsonrpc_error(None, -32600, "Invalid Request")
+        dataj = json.loads(request.body.read().decode("utf-8"))
     except Exception as e:
-        logger.debug("JSON parsing error: %s" % e)
-        return make_jsonrpc_error(None, -32700, "Parse error")
+        raise JsonRpcParseError(str(e))
 
-    if request_id is None:
+    token = request.headers.get('API-Token', urltoken)
+
+    try:
+        if token is None:
+            raise JsonRpcServerError("Token missing")
+        if isinstance(dataj, list):
+            logger.debug("Request is a list")
+            res = []
+            for rj in dataj:
+                try:
+                    res.append(do_handle_jsonrpc_request(request, rj, token))
+                except JsonRpcError as err:
+                    res.append(err.toJsonRpcMessage)
+            response.headers['Content-Type'] = 'application/json'
+            return res
+        else:
+            return do_handle_jsonrpc_request(request, dataj, token)
+    except JsonRpcError as err:
+        response.headers['Content-Type'] = 'application/json'
+        return err.toJsonRpcMessage
+
+
+def do_handle_jsonrpc_request(request, jsonrcp, token) -> dict:
+    try:
+        request_id = jsonrcp.get('id')
+    except AttributeError as ate:
         logger.debug("JSON request ID missing")
-        return make_jsonrpc_error(None, -32600, "Invalid Request")
+        raise JsonRpcInvalidRequest(str(ate))
 
-    token = request.headers.get('API-Token',urltoken)
-
-    if do_filter_jsonrpc_request(token, dataj):
+    if do_filter_jsonrpc_request(token, jsonrcp, request_id):
         r = requests.post(_osdnc_api, data=bottle.request.body, headers={'Content-Type': 'application/json-rpc'})
-
-        logger.debug("Result status: %d " %(r.status_code))
+        logger.debug("Result status: %d " % (r.status_code))
         if r.headers.get('Content-Type') and r.headers['Content-Type'] == "application/json":
             try:
                 resj = r.json()
+                logger.debug("Result from OpenSDNcore: %s" % resj)
+                response.status = r.status_code
+                return resj
             except Exception as e:
-                response.status = 500
                 logger.error("Error reading response json: %s" % e)
-                return "500 Internal error parsing the response from OpenSDNcore!"
+                raise JsonRpcServerError("error parsing the response from OpenSDNcore!", id=request_id)
         else:
-            logger.debug("OpenSDNcore returned no json! heders: %s" % r.headers)
-            return make_jsonrpc_error(request_id, -32603, "Internal error: Invalid response from upstream server")
-
-        logger.debug("Result from OpenSDNcore: %s" % resj)
-        response.status = r.status_code
-        return resj
+            logger.debug("OpenSDNcore returned no json! headers: %s" % r.headers)
+            raise JsonRpcInternalError("Invalid response from upstream server", id=request_id)
     else:
-        return make_jsonrpc_error(request_id, -32643, "Method not allowed or Token missing/invalid")
+        raise JsonRpcServerError("Method not Allowed", code=-32043, id=request_id)
 
 
-def do_filter_jsonrpc_request(token, data):
-    allowed_methods = ["help", "list.methods"]
+def do_filter_jsonrpc_request(token, rpcdata, id) -> bool:
 
     if token is None:
         logger.info("Token not found in request!")
@@ -179,22 +203,26 @@ def do_filter_jsonrpc_request(token, data):
 
     experimenter = _experiments.get(token)
     if experimenter is None:
-        logger.info("Invalid Token %s"%token)
-        return False
+        logger.info("Invalid Token %s" % token)
+        raise JsonRpcServerError("Invalid API-Token",code=-32043, id=id)
 
-    logger.debug("data: %s"%data)
-    method = data.get("method")
+    logger.debug("Request: %s" % rpcdata)
+    try:
+        method = rpcdata.get("method")
+    except Exception as e:
+        logger.error("method not found in request")
+        raise JsonRpcInvalidRequest(str(e))
 
-    logger.debug("Method: %s"%method)
 
-    if method is not None and method in allowed_methods:
+    logger.debug("Method: %s" % method)
+
+    if _SdnFilter.validateRequest(token, method, rpcdata.get("params",[])):
         return True
-
-    return False
+    raise JsonRpcServerError("Method not Allowed", code=-32043, id=id)
 
 
 def start():
-    _experiments["test01"]=  {"tenant": "123invalid456", "flow_tables": 300}
+    _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
     logger.info("starting up")
-    bottle.debug(True)
-    bottle.run(host = '0.0.0.0', port = 8001, reloader=True)
+    _SdnFilter = WhitelistFilter(["help", "list.methods"])
+    bottle.run(host='0.0.0.0', port=8001, reloader=True)
