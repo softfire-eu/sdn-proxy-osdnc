@@ -20,7 +20,7 @@ _experiments = dict()
 _auth_secret = "90d82936f887a871df8cc82c1518a43e"
 _api_endpoint = "http://127.0.0.1:8001/"
 _osdnc_api = "http://192.168.41.153:10010/"
-_SdnFilter = SdnFilter()
+mySdnFilter = SdnFilter()
 
 
 
@@ -213,16 +213,17 @@ def do_filter_jsonrpc_request(token, rpcdata, id) -> bool:
         logger.error("method not found in request")
         raise JsonRpcInvalidRequest(str(e))
 
-
     logger.debug("Method: %s" % method)
+    logger.debug("using SDNFilter %s to validate request"%type(mySdnFilter))
 
-    if _SdnFilter.validateRequest(token, method, rpcdata.get("params",[])):
+    if mySdnFilter.validateRequest(token, method, rpcdata.get("params",[])):
         return True
     raise JsonRpcServerError("Method not Allowed", code=-32043, id=id)
 
 
 def start():
+    global mySdnFilter
     _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
     logger.info("starting up")
-    _SdnFilter = WhitelistFilter(["help", "list.methods"])
+    mySdnFilter = WhitelistFilter(["help", "list.methods"])
     bottle.run(host='0.0.0.0', port=8001, reloader=True)

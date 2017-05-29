@@ -20,7 +20,7 @@ class JsonRpcError(Exception):
 
     @property
     def toJsonRpcMessage(self) -> dict:
-        return dict(id=self.id, error=dict(message=self.message, code=self.errorcode), jsonrpc=selfversion)
+        return dict(id=self.id, error=dict(message=self.message, code=self.errorcode), jsonrpc=self.version)
 
 class JsonRpcInternalError(JsonRpcError):
     pass
