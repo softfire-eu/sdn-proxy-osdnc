@@ -25,6 +25,19 @@ class WhitelistFilter(SdnFilter):
         return (method is not None) and (method in self._whitelist)
 
 
+class TenantKnowlageBase(object):
+    def __init__(self) -> None:
+        super().__init__()
+        self._allowed_flowtables = []
+        self._mac_addresses = []
+
+    def check_flowtable(self, flowtable) -> bool:
+        return flowtable in self._allowed_flowtables
+
+    def check_mac_address(self, mac_address) -> bool:
+        return mac_address in self._mac_addresses
+
+
 class OpenSdnCoreFilter(SdnFilter):
     """
     This class implements filters to handle JSON-RPC requests of the OpenSDNcore Northbound API
@@ -61,6 +74,11 @@ class OpenSdnCoreFilter(SdnFilter):
       }
     }
     """
+
+    def __init__(self, allowed_methods=[]) -> None:
+        super().__init__()
+        self._allowed_methods = allowed_methods
+        self._knowlagebase = TenantKnowlageBase()
 
     def filterResponse(self, response):
         return super().filterResponse(response)
