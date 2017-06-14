@@ -8,7 +8,7 @@ import requests
 from bottle import post, get, delete, route
 from bottle import request, response
 
-from SdnFilter import SdnFilter, WhitelistFilter
+from SdnFilter import SdnFilter, OpenSdnCoreFilter
 from osdn_exceptions import JsonRpcParseError, JsonRpcInvalidRequest, JsonRpcError, JsonRpcServerError, \
     JsonRpcInternalError
 from utils import get_logger
@@ -19,7 +19,7 @@ _experiments = dict()
 _auth_secret = "90d82936f887a871df8cc82c1518a43e"
 _api_endpoint = "http://127.0.0.1:8001/"
 _osdnc_api = "http://192.168.41.153:10010/"
-_mySdnFilter = SdnFilter()
+_SdnFilter = SdnFilter()
 
 
 def check_auth_header(headers):
@@ -32,7 +32,7 @@ def check_auth_header(headers):
 
 
 def get_user_flowtables(tenant_id):
-    return list(range(11, 21))
+    return list(range(11, 13))
 
 
 @post('/SDNproxySetup')
@@ -71,6 +71,7 @@ def proxy_creation_handler():
             return "Duplicate experiment!"
 
         _experiments[experiment_id] = {"tenant": tenant_id, "flow_tables": get_user_flowtables(experiment_id)}
+        _SdnFilter.token_to_tenant()
 
         response.headers['Content-Type'] = 'application/json'
         response.headers['Cache-Control'] = 'no-cache'
@@ -164,7 +165,9 @@ def do_proxy_jsonrpc(urltoken=None):
             res = []
             for rj in dataj:
                 try:
-                    res.append(do_handle_jsonrpc_request(request, rj, token))
+                    resdata = do_handle_jsonrpc_request(request, rj, token)
+                    if resdata:
+                        res.append()
                 except JsonRpcError as err:
                     res.append(err.toJsonRpcMessage)
             response.headers['Content-Type'] = 'application/json'
@@ -189,11 +192,17 @@ def do_handle_jsonrpc_request(request, jsonrcp, token) -> dict:
     :return:        JSON-RPC response object
     :raises JsonRpcError: in case of error
     """
+
+    if not isinstance(jsonrcp, dict):
+        logger.error("request is not a dict()!!")
+        return dict()
+
     try:
         request_id = jsonrcp.get('id')
     except AttributeError as ate:
-        logger.debug("JSON request ID missing")
-        raise JsonRpcInvalidRequest(str(ate))
+        logger.debug("JSON request ID missing -> Notification not supported")
+        return dict()
+        # raise JsonRpcInvalidRequest(str(ate))
 
     do_validate_jsonrpc_request(token, jsonrcp, request_id)
 
@@ -207,7 +216,7 @@ def do_handle_jsonrpc_request(request, jsonrcp, token) -> dict:
             logger.error("Error reading response json: %s" % e)
             raise JsonRpcServerError("error parsing the response from OpenSDNcore!", id=request_id)
 
-        _mySdnFilter.filterResponse(resj)
+        _SdnFilter.filter_response(resj, jsonrcp.get("method"))
         response.status = r.status_code
         return resj
     else:
@@ -215,7 +224,7 @@ def do_handle_jsonrpc_request(request, jsonrcp, token) -> dict:
         raise JsonRpcInternalError("Invalid response from upstream server", id=request_id)
 
 
-def do_validate_jsonrpc_request(token, rpcdata, id) -> None:
+def do_validate_jsonrpc_request(token: str, rpcdata: dict, id) -> None:
     """
     Check if a JSON-RPC request is valid and allowed using an SdnFilter instance.
     :param token:   Security Token
@@ -240,15 +249,17 @@ def do_validate_jsonrpc_request(token, rpcdata, id) -> None:
         raise JsonRpcInvalidRequest(str(e))
 
     logger.debug("Method: %s" % method)
-    logger.debug("using SDNFilter %s to validate request" % type(_mySdnFilter))
+    logger.debug("using SDNFilter %s to validate request" % type(_SdnFilter))
 
-    if not _mySdnFilter.validateRequest(token, method, rpcdata.get("params", [])):
+    if not _SdnFilter.validate_request(token, method, rpcdata.get("params", [])):
         raise JsonRpcServerError("Method not Allowed", code=-32043, id=id)
 
 
 def start():
-    global _mySdnFilter
+    global _SdnFilter
     _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
     logger.info("starting up")
-    _mySdnFilter = WhitelistFilter(["help", "list.methods"])
+    _SdnFilter = OpenSdnCoreFilter()
+    for k, v in _experiments.items():
+        _SdnFilter.add_experiment(k, v["tenant"])
     bottle.run(host='0.0.0.0', port=8001, reloader=True)

@@ -15,7 +15,7 @@ def read(fname):
 
 setup(
     name="sdn-proxy-osdnc",
-    version="0.0.1",
+    version="0.3.0",
     author="SoftFIRE",
     author_email="softfire@softfire.eu",
     description="The SoftFIRE OpenSDNCore Controller Proxy",
