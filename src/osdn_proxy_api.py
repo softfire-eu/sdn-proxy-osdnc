@@ -4,6 +4,7 @@ import json
 import os
 
 import bottle
+from _datetime import datetime
 import requests
 from bottle import post, get, delete, route
 from bottle import request, response
@@ -144,7 +145,10 @@ def proxy_creation_handler():
 
         user_flowtables = get_user_flowtables(tenant_id)
         logger.debug("add to _experiments")
-        _experiments[experiment_id] = {"tenant": tenant_id, "flow_tables": user_flowtables}
+        _experiments[experiment_id] = {"tenant": tenant_id,
+                                       "flow_tables": user_flowtables,
+                                       "timestamp": datetime.datetime.now().isoformat()
+                                       }
         logger.debug("add to SdnFilter")
         _SdnFilter.add_experiment(experiment_id, tenant_id)
         logger.debug("add to KnowledgeBase")
@@ -372,7 +376,7 @@ def start(config: configparser.ConfigParser):
     _osdnc_api = get_config("sdn", "opensdncore-api-url", default="http://192.168.41.153:10010/", config=config)
 
     _experiments = utils.load_experiments(config)
-    
+
     try:
         utils.store_experiments(_experiments, config) # check if the file is writable
     except Exception as e:
