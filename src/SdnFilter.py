@@ -1,4 +1,4 @@
-from KnowlageBase import KnowlageBase, TenantKnowlageBase
+from KnowledgeBase import KnowledgeBase, TenantKnowledgeBase
 from utils import get_logger
 
 _log = get_logger(__name__)
@@ -46,7 +46,7 @@ class OpenSdnCoreFilter(SdnFilter):
     This class implements filters to handle JSON-RPC requests of the OpenSDNcore Northbound API
     """
 
-    def __init__(self, allowed_methods=None) -> None:
+    def __init__(self, knowlagebase: KnowledgeBase, allowed_methods=None) -> None:
         super().__init__()
         if allowed_methods:
             self._allowed_methods = allowed_methods
@@ -57,9 +57,12 @@ class OpenSdnCoreFilter(SdnFilter):
                                      "ofc.send.multipart.flow", "ofc.send.multipart.port_stats",
                                      "ofc.send.multipart.port_description"]
         self._forbidden_methods = ["ofc.send.role_request"]
-        self._knowlagebase = KnowlageBase()
-        self._knowlagebase.add_tenant("2b5c4fc95268456985ad2254253f49d5", TenantKnowlageBase([10]))
-        self._knowlagebase.add_tenant("123invalid456", TenantKnowlageBase(flowtables=[300]))
+        if not knowlagebase:
+            self._knowlagebase = KnowledgeBase()
+            self._knowlagebase.add_tenant("2b5c4fc95268456985ad2254253f49d5", TenantKnowledgeBase([10]))
+            self._knowlagebase.add_tenant("123invalid456", TenantKnowledgeBase(flowtables=[300]))
+        else:
+            self._knowlagebase = knowlagebase
 
     def filter_response(self, response: dict, method):
         if method == "list.methods":
@@ -344,4 +347,5 @@ class OpenSdnCoreFilter(SdnFilter):
         target_table = ofp_multipart_flow["table_id"]  # extract flow-table to which the flow should be written
         if self._knowlagebase.check_flowtable(tenant_id, target_table):
             return True
+        _log.debug("flowtable %s not allowed for teanant %s" % (target_table, tenant_id))
         return False

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import configparser
 import json
 import os
 
@@ -7,22 +7,27 @@ import bottle
 import requests
 from bottle import post, get, delete, route
 from bottle import request, response
+from ofsctl import ofsctl
 
+import utils
+from KnowledgeBase import KnowledgeBase, TenantKnowledgeBase
 from SdnFilter import SdnFilter, OpenSdnCoreFilter
 from osdn_exceptions import JsonRpcParseError, JsonRpcInvalidRequest, JsonRpcError, JsonRpcServerError, \
     JsonRpcInternalError
-from utils import get_logger
+from utils import get_logger, get_config
 
 logger = get_logger(__name__)
 
 _experiments = dict()
-_auth_secret = "90d82936f887a871df8cc82c1518a43e"
+_auth_secret = "secret"
 _api_endpoint = "http://127.0.0.1:8001/"
 _osdnc_api = "http://192.168.41.153:10010/"
 _SdnFilter = SdnFilter()
+_number_of_tables_per_tenant = 3
+_knowledgebase = KnowledgeBase()
 
 
-def check_auth_header(headers):
+def check_auth_header(headers: dict) -> bool:
     if "Auth-Secret" in headers.keys():
         auth_secret = headers.get("Auth-Secret")
         logger.debug("'Auth-Secret' header present! value: %s" % auth_secret)
@@ -32,7 +37,73 @@ def check_auth_header(headers):
 
 
 def get_user_flowtables(tenant_id):
-    return list(range(11, 13))
+    ofsdb = ofsctl.get_db()
+    start_ft = int(ofsdb.get_of_start_table_from_tenant(tenant_id)[0][0])
+    return list(range(start_ft, start_ft + _number_of_tables_per_tenant))
+
+
+def get_next_os_table_offset(max_of_table_ofs):
+    if max_of_table_ofs + _number_of_tables_per_tenant < (254 - _number_of_tables_per_tenant):
+        return max_of_table_ofs + _number_of_tables_per_tenant
+
+
+def find_next_os_table_offset(list_of_of_table_ofs):
+    raise Exception("function unimplemented")
+
+
+@post("/PrepareTenant")
+def proxy_prepare_tenant():
+    """
+ >{
+     "tenant_id": "fed0b52c7e034d5785880613e78d4411"
+ }
+ <{
+   "flow-table-offset": 10
+  }
+    :return:
+    """
+    if check_auth_header(request.headers):
+        # _SdnFilter.add_experiment()
+        # parse input data
+        try:
+            logger.debug("JSON: %s" % request.json)
+            data = request.json
+            tenant_id = data.get("tenant_id")
+            logger.debug("received tenant_id: %s" % tenant_id)
+            if not tenant_id:
+                return bottle.HTTPError(500, "tenant id missing")
+
+            # todo send tenant id to ofsctl
+            ofsdb = ofsctl.get_db()
+            tenants = ofsdb.list_tenants()
+            max_of_table = 0
+            flow_table_offset = None
+            for tenant, flow in tenants:
+                logger.debug("proxy_prepare_tenant: OFSdb(tenant: %s of_table_ofs: %s)" % (tenant, flow))
+                flow = int(flow)
+                if max_of_table < flow:
+                    max_of_table = flow
+                if tenant == tenant_id:
+                    logger.info("proxy_prepare_tenant: tenant (%s) already prepared in OFSdb" % tenant_id)
+                    flow_table_offset = flow
+            logger.debug("proxy_prepare_tenant: max_flowt: %d" % (max_of_table))
+            if flow_table_offset is None:
+                # create new entry
+                next_os_table_offset = get_next_os_table_offset(max_of_table)
+                logger.info("proxy_prepare_tenant: creating a new tenant in ofsDB with ofs: %d" % next_os_table_offset)
+                ofsdb.add_tenant(tenant_id, next_os_table_offset)
+                flow_table_offset = int(ofsdb.get_of_start_table_from_tenant(tenant_id)[0][0])
+
+        except Exception as e:
+            logger.error(e)
+            raise Exception("invalid input data")
+        logger.debug("proxy_prepare_tenant: flow-table-offset: %s" % flow_table_offset)
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Cache-Control'] = 'no-cache'
+        return json.dumps({"flow-table-offset": flow_table_offset})
+    else:
+        raise bottle.HTTPError(403, "Auth-Secret error!")
+    pass
 
 
 @post('/SDNproxySetup')
@@ -43,17 +114,17 @@ def proxy_creation_handler():
         "experiment_id": "a5cfaf1e81f35fde41bef54e35772f2b",
         "tenant_id": "fed0b52c7e034d5785880613e78d4411"
       }
-      response:
+      response:ofsdb.get_of_start_table_from_tenant(tenant_id)
       {
         "endpoint_url": "http:/foo.bar",
-        "user-flow-tables": [10,11,12,13,14,15]
+        "user-flow-tables": [10,11,12]
       }
     """
     try:
         # parse input data
         try:
             data = request.json
-            logger.debug("JSON: %s" % request.json)
+            logger.debug("SDNproxySetup: JSON: %s" % request.json)
         except Exception as e:
             logger.error(e)
             raise ValueError(e)
@@ -67,19 +138,55 @@ def proxy_creation_handler():
 
         # check for existence
         if experiment_id in _experiments:
+            logger.error("SDNproxySetup: duplicate experiment %s" % experiment_id)
             response.status = 500
             return "Duplicate experiment!"
 
-        _experiments[experiment_id] = {"tenant": tenant_id, "flow_tables": get_user_flowtables(experiment_id)}
-        _SdnFilter.token_to_tenant()
+        user_flowtables = get_user_flowtables(tenant_id)
+        logger.debug("add to _experiments")
+        _experiments[experiment_id] = {"tenant": tenant_id, "flow_tables": user_flowtables}
+        logger.debug("add to SdnFilter")
+        _SdnFilter.add_experiment(experiment_id, tenant_id)
+        logger.debug("add to KnowledgeBase")
+        _knowledgebase.add_tenant(tenant_id, TenantKnowledgeBase(flowtables=user_flowtables))
+        utils.store_experiments(_experiments)
+        # _SdnFilter.token_to_tenant()
 
         response.headers['Content-Type'] = 'application/json'
         response.headers['Cache-Control'] = 'no-cache'
         return json.dumps(
-            {"user-flow-tables": _experiments[experiment_id]["flow_tables"], "endpoint_url": _api_endpoint})
+            {"user-flow-tables": user_flowtables, "endpoint_url": _api_endpoint})
 
-    except:
+    except Exception as e:
+        logger.error("SDNproxySetup failed: %s" % e)
         response.status = 500
+        raise bottle.HTTPError(500, exception=e)
+        # return e
+
+
+@get('/ofsctl_list_tenants')
+@get('/ofsctl_del_tenant/<delid>')
+def handle_ofsctl_list_tenants(delid=None):
+    ofsdb = ofsctl.get_db()
+    if delid:
+        logger.info("deleting tenant %d from ofsDB..")
+        ofsdb.del_tenant(delid)
+    logger.info("listing tenants from ofsDB")
+    tenants = ofsdb.list_tenants()
+    response.headers['Content-Type'] = 'application/json'
+    response.headers['Cache-Control'] = 'no-cache'
+    res = dict()
+    for k, v in tenants:
+        res[k] = v
+    return json.dumps(res)
+
+
+# @get('/ofsctl_listbr')
+def handle_ofsctl_list_br():
+    response.headers['Content-Type'] = 'application/json'
+    response.headers['Cache-Control'] = 'no-cache'
+    ofsdb = ofsctl.get_db()
+    return json.dumps(ofsdb.list(None))
 
 
 @get('/SDNproxy')
@@ -118,6 +225,7 @@ def delete_handler(token):
         else:
             response.status = 200
             msg = "Experiment successfully deleted!"
+            utils.store_experiments(_experiments)
         logger.debug(msg)
         response.headers['Content-Type'] = 'application/json'
         return json.dumps({"msg": msg})
@@ -129,12 +237,13 @@ def delete_handler(token):
 # ######### static files
 
 @route('/', method="GET")
-def index():
+@route('/index.html', method="GET")
+def handle_index():
     return bottle.static_file('index.html', root=os.path.join(os.getcwd(), 'static'))
 
 
 @route('/favicon.ico', method="GET")
-def favicon():
+def handle_favicon():
     return bottle.static_file('favicon.ico', root=os.path.join(os.getcwd(), 'static'))
 
 
@@ -165,7 +274,7 @@ def do_proxy_jsonrpc(urltoken=None):
             res = []
             for rj in dataj:
                 try:
-                    resdata = do_handle_jsonrpc_request(request, rj, token)
+                    resdata = do_handle_jsonrpc_request(rj, token)
                     if resdata:
                         res.append()
                 except JsonRpcError as err:
@@ -173,7 +282,7 @@ def do_proxy_jsonrpc(urltoken=None):
             response.headers['Content-Type'] = 'application/json'
             return res
         else:
-            return do_handle_jsonrpc_request(request, dataj, token)
+            return do_handle_jsonrpc_request(dataj, token)
     except JsonRpcError as err:
         response.headers['Content-Type'] = 'application/json'
         return err.toJsonRpcMessage
@@ -183,10 +292,9 @@ def do_proxy_jsonrpc(urltoken=None):
         return JsonRpcError(message=e).toJsonRpcMessage
 
 
-def do_handle_jsonrpc_request(request, jsonrcp, token) -> dict:
+def do_handle_jsonrpc_request(jsonrcp, token) -> dict:
     """
     Handle a single JSON-RPC request object
-    :param request: bottle request object
     :param jsonrcp: JSON-RCP request dictionary/object
     :param token:   Security Token
     :return:        JSON-RPC response object
@@ -255,11 +363,27 @@ def do_validate_jsonrpc_request(token: str, rpcdata: dict, id) -> None:
         raise JsonRpcServerError("Method not Allowed", code=-32043, id=id)
 
 
-def start():
-    global _SdnFilter
-    _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
+def start(config: configparser.ConfigParser):
+    global _SdnFilter, _auth_secret, _api_endpoint, _osdnc_api, _experiments
     logger.info("starting up")
-    _SdnFilter = OpenSdnCoreFilter()
+
+    _auth_secret = get_config("sdn", "sdn-manager-auth-secret", default="not_so_secret_token", config=config)
+    _api_endpoint = get_config("sdn", "local-api-endpoint", default="http://127.0.0.1:8001/", config=config)
+    _osdnc_api = get_config("sdn", "opensdncore-api-url", default="http://192.168.41.153:10010/", config=config)
+
+    _experiments = utils.load_experiments(config)
+    if len(_experiments) == 0:
+        logger.info("adding testing experiment (%s) to list of experiments" % 'test01')
+        _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
+
+    _SdnFilter = OpenSdnCoreFilter(_knowledgebase)
     for k, v in _experiments.items():
-        _SdnFilter.add_experiment(k, v["tenant"])
+        logger.debug("adding experiment %s to SdnFilter.." % k)
+        tenant = v["tenant"]
+        _SdnFilter.add_experiment(k, tenant)
+        try:
+            _knowledgebase.add_tenant(tenant, TenantKnowledgeBase(get_user_flowtables(tenant)))
+        except Exception as e:
+            logger.warn("adding tenant(%s) to knowledgebase failed" % tenant)
+            pass
     bottle.run(host='0.0.0.0', port=8001, reloader=True)
