@@ -383,9 +383,9 @@ def start(config: configparser.ConfigParser):
         logger.error("state file not writable!!: %s" % e)
         exit(0)
 
-    if len(_experiments) == 0:
-        logger.info("adding testing experiment (%s) to list of experiments" % 'test01')
-        _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
+    #if len(_experiments) == 0:
+    #    logger.info("adding testing experiment (%s) to list of experiments" % 'test01')
+    #    _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
 
     _SdnFilter = OpenSdnCoreFilter(_knowledgebase)
     for k, v in _experiments.items():
