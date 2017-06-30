@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 import configparser
+import datetime
 import json
 import os
 
 import bottle
-import datetime
 import requests
 from bottle import post, get, delete, route
 from bottle import request, response
@@ -198,8 +198,16 @@ def proxy_listing_handler():
     """Handles name listing"""
     response.headers['Content-Type'] = 'application/json'
     response.headers['Cache-Control'] = 'no-cache'
-    # return json.dumps(list(request.headers.items()))
-    return json.dumps(_experiments)
+    if check_auth_header(request.headers):
+        return json.dumps(_experiments)
+    else:
+        res = dict()
+        for ex, v in _experiments:
+            exid = "%s...%s" % (ex[:3], ex[len(ex) - 3:])
+            tid = v["tenant"]
+            v["tenant"] = "%s...%s" % (tid[:3], tid[len(tid) - 3:])
+            res[exid] = v
+        return json.dumps(res)
 
 
 @get('/SDNproxy/<token>')
@@ -249,6 +257,11 @@ def handle_index():
 @route('/favicon.ico', method="GET")
 def handle_favicon():
     return bottle.static_file('favicon.ico', root=os.path.join(os.getcwd(), 'static'))
+
+
+@get('/api')
+def redirect_browser():
+    return bottle.redirect('/')
 
 
 # ######### end static files
@@ -378,14 +391,14 @@ def start(config: configparser.ConfigParser):
     _experiments = utils.load_experiments(config)
 
     try:
-        utils.store_experiments(_experiments, config) # check if the file is writable
+        utils.store_experiments(_experiments, config)  # check if the file is writable
     except Exception as e:
         logger.error("state file not writable!!: %s" % e)
         exit(0)
 
-    if len(_experiments) == 0:
-        logger.info("adding testing experiment (%s) to list of experiments" % 'test01')
-        _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
+    # if len(_experiments) == 0:
+    #     logger.info("adding testing experiment (%s) to list of experiments" % 'test01')
+    #     _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
 
     _SdnFilter = OpenSdnCoreFilter(_knowledgebase)
     for k, v in _experiments.items():
