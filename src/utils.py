@@ -10,6 +10,7 @@ _logger = dict()
 
 
 def get_logger(name):
+    print("config_file: %s" % CONFIG_FILE_PATH)
     logging.config.fileConfig(CONFIG_FILE_PATH)
     if _logger.get(name) is None:
         _logger[name] = logging.getLogger("eu.softfire.%s" % name)
