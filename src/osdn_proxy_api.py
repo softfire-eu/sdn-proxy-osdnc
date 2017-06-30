@@ -372,6 +372,13 @@ def start(config: configparser.ConfigParser):
     _osdnc_api = get_config("sdn", "opensdncore-api-url", default="http://192.168.41.153:10010/", config=config)
 
     _experiments = utils.load_experiments(config)
+    
+    try:
+        utils.store_experiments(_experiments, config) # check if the file is writable
+    except Exception as e:
+        logger.error("state file not writable!!: %s" % e)
+        exit(0)
+
     if len(_experiments) == 0:
         logger.info("adding testing experiment (%s) to list of experiments" % 'test01')
         _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
@@ -384,6 +391,6 @@ def start(config: configparser.ConfigParser):
         try:
             _knowledgebase.add_tenant(tenant, TenantKnowledgeBase(get_user_flowtables(tenant)))
         except Exception as e:
-            logger.warn("adding tenant(%s) to knowledgebase failed" % tenant)
+            logger.warn("adding tenant '%s' to knowledgebase failed: %s" % (tenant, e))
             pass
     bottle.run(host='0.0.0.0', port=8001, reloader=True)
