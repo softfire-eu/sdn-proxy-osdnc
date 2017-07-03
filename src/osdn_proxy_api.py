@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 import configparser
+import datetime
 import json
 import os
 
 import bottle
-import datetime
 import requests
 from bottle import post, get, delete, route
 from bottle import request, response
@@ -207,8 +207,8 @@ def proxy_listing_handler():
         for ex, v in _experiments.items():
             exid = "%s...%s" % (ex[:3], ex[len(ex) - 3:])
             tid = v["tenant"]
-            res[exid] = v
-            res[exid]["tenant"] = "%s...%s" % (tid[:3], tid[len(tid) - 3:])
+            tid = "%s...%s" % (tid[:3], tid[len(tid) - 3:])
+            res[exid] = dict(tenant=tid, flow_tables=v.get("flow_tables"), timestamp=v.get("timestamp"))
         return json.dumps(res)
 
 
@@ -388,12 +388,12 @@ def start(config: configparser.ConfigParser):
     _experiments = utils.load_experiments(config)
 
     try:
-        utils.store_experiments(_experiments, config) # check if the file is writable
+        utils.store_experiments(_experiments, config)  # check if the file is writable
     except Exception as e:
         logger.error("state file not writable!!: %s" % e)
         exit(0)
 
-    #if len(_experiments) == 0:
+    # if len(_experiments) == 0:
     #    logger.info("adding testing experiment (%s) to list of experiments" % 'test01')
     #    _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
 
