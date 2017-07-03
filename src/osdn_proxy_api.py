@@ -198,8 +198,18 @@ def proxy_listing_handler():
     """Handles name listing"""
     response.headers['Content-Type'] = 'application/json'
     response.headers['Cache-Control'] = 'no-cache'
-    # return json.dumps(list(request.headers.items()))
-    return json.dumps(_experiments)
+    if check_auth_header(request.headers):
+        logger.debug("Listing SDNproxies with full details!")
+        return json.dumps(_experiments)
+    else:
+        logger.debug("Auth header missing or invalid, listing SDN proxies with reduced details")
+        res = dict()
+        for ex, v in _experiments.items():
+            exid = "%s...%s" % (ex[:3], ex[len(ex) - 3:])
+            tid = v["tenant"]
+            res[exid] = v
+            res[exid]["tenant"] = "%s...%s" % (tid[:3], tid[len(tid) - 3:])
+        return json.dumps(res)
 
 
 @get('/SDNproxy/<token>')
