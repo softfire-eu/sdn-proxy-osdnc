@@ -296,7 +296,7 @@ def do_proxy_jsonrpc(urltoken=None):
                 try:
                     resdata = do_handle_jsonrpc_request(rj, token)
                     if resdata:
-                        res.append()
+                        res.append(resdata)
                 except JsonRpcError as err:
                     res.append(err.toJsonRpcMessage)
             response.headers['Content-Type'] = 'application/json'
@@ -307,7 +307,7 @@ def do_proxy_jsonrpc(urltoken=None):
         response.headers['Content-Type'] = 'application/json'
         return err.toJsonRpcMessage
     except KeyError as ke:
-        logger.error("%s missing from jsonrpc request" % ke.args[0])
+        logger.error("%s missing from json-rpc request" % ke.args[0])
         response.headers['Content-Type'] = 'application/json'
         return JsonRpcError(message="%s missing from json-rpc request" % (ke.args[0])).toJsonRpcMessage
     except Exception as e:
