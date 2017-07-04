@@ -1,4 +1,5 @@
 from KnowledgeBase import KnowledgeBase, TenantKnowledgeBase
+from osdn_exceptions import JsonRpcInvalidParams
 from utils import get_logger
 
 _log = get_logger(__name__)
@@ -138,7 +139,7 @@ class OpenSdnCoreFilter(SdnFilter):
                 return False
             elif method == "ofc.send.multipart.flow":
                 """get statistic information about individual flow entries"""
-                return self._validate_multipart_flow(tenant_id, args["ofp_multipart_flow"])
+                return self._validate_multipart_flow(tenant_id, args.get("ofp_multipart_flow", dict()))
                 pass
             elif method == "ofc.send.multipart.port_stats":
                 """get aggregate statistic information about ports"""
@@ -347,5 +348,6 @@ class OpenSdnCoreFilter(SdnFilter):
         target_table = ofp_multipart_flow["table_id"]  # extract flow-table to which the flow should be written
         if self._knowlagebase.check_flowtable(tenant_id, target_table):
             return True
-        _log.debug("flowtable %s not allowed for teanant %s" % (target_table, tenant_id))
+        _log.debug("flow-table %s not allowed for tenant %s" % (target_table, tenant_id))
+        raise JsonRpcInvalidParams("flow-table %s not allowed" % target_table)
         return False

@@ -39,7 +39,12 @@ def check_auth_header(headers: dict) -> bool:
 
 def get_user_flowtables(tenant_id):
     ofsdb = ofsctl.get_db()
+    if ofsdb.db_type == "mysql":
+        logger.debug("querying ofsdb @%s" % ofsdb.mysql_config.get("host"))
+    else:
+        logger.debug("reading ofsDB from %s" % ofsdb.db_file)
     start_ft = int(ofsdb.get_of_start_table_from_tenant(tenant_id)[0][0])
+    logger.debug("done!")
     return list(range(start_ft, start_ft + _number_of_tables_per_tenant))
 
 
@@ -273,14 +278,15 @@ def do_proxy_jsonrpc(urltoken=None):
     :param urltoken:
     :return:
     """
-    try:
-        dataj = json.loads(request.body.read().decode("utf-8"))
-    except Exception as e:
-        raise JsonRpcParseError(str(e))
 
     token = request.headers.get('API-Token', urltoken)
 
     try:
+        try:
+            dataj = json.loads(request.body.read().decode("utf-8"))
+        except Exception as e:
+            raise JsonRpcParseError(str(e))
+
         if token is None:
             raise JsonRpcServerError("Token missing")
         if isinstance(dataj, list):
@@ -300,10 +306,14 @@ def do_proxy_jsonrpc(urltoken=None):
     except JsonRpcError as err:
         response.headers['Content-Type'] = 'application/json'
         return err.toJsonRpcMessage
+    except KeyError as ke:
+        logger.error("%s missing from jsonrpc request" % ke.args[0])
+        response.headers['Content-Type'] = 'application/json'
+        return JsonRpcError(message="%s missing from json-rpc request" % (ke.args[0])).toJsonRpcMessage
     except Exception as e:
         logger.error(e)
         response.headers['Content-Type'] = 'application/json'
-        return JsonRpcError(message=e).toJsonRpcMessage
+        return JsonRpcError(message="Error Handling request. Exception(%s): %s" % (type(e), e.args[0])).toJsonRpcMessage
 
 
 def do_handle_jsonrpc_request(jsonrcp, token) -> dict:
