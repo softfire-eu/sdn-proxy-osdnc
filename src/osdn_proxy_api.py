@@ -68,18 +68,18 @@ def proxy_prepare_tenant():
   }
     :return:
     """
-    if check_auth_header(request.headers):
-        # _SdnFilter.add_experiment()
+    if not check_auth_header(request.headers):
+        raise bottle.HTTPError(403, "Auth-Secret error!")
+    else:
         # parse input data
         try:
-            logger.debug("JSON: %s" % request.json)
+            logger.debug("proxy_prepare_tenant: JSON: %s" % request.json)
             data = request.json
             tenant_id = data.get("tenant_id")
             logger.debug("received tenant_id: %s" % tenant_id)
             if not tenant_id:
                 return bottle.HTTPError(500, "tenant id missing")
 
-            # todo send tenant id to ofsctl
             ofsdb = ofsctl.get_db()
             tenants = ofsdb.list_tenants()
             max_of_table = 0
@@ -107,9 +107,6 @@ def proxy_prepare_tenant():
         response.headers['Content-Type'] = 'application/json'
         response.headers['Cache-Control'] = 'no-cache'
         return json.dumps({"flow-table-offset": flow_table_offset})
-    else:
-        raise bottle.HTTPError(403, "Auth-Secret error!")
-    pass
 
 
 @post('/SDNproxySetup')
@@ -126,6 +123,9 @@ def proxy_creation_handler():
         "user-flow-tables": [10,11,12]
       }
     """
+    if not check_auth_header(request.headers):
+        raise bottle.HTTPError(403, "Auth-Secret error!")
+
     try:
         # parse input data
         try:
@@ -176,6 +176,8 @@ def proxy_creation_handler():
 @get('/ofsctl_list_tenants')
 @get('/ofsctl_del_tenant/<delid>')
 def handle_ofsctl_list_tenants(delid=None):
+    if not check_auth_header(request.headers):
+        raise bottle.HTTPError(403, "Auth-Secret error!")
     ofsdb = ofsctl.get_db()
     if delid:
         logger.info("deleting tenant %d from ofsDB..")
@@ -190,8 +192,10 @@ def handle_ofsctl_list_tenants(delid=None):
     return json.dumps(res)
 
 
-# @get('/ofsctl_listbr')
+@get('/ofsctl_listbr')
 def handle_ofsctl_list_br():
+    if not check_auth_header(request.headers):
+        raise bottle.HTTPError(403, "Auth-Secret error!")
     response.headers['Content-Type'] = 'application/json'
     response.headers['Cache-Control'] = 'no-cache'
     ofsdb = ofsctl.get_db()
@@ -237,7 +241,9 @@ def delete_handler(token):
     """delete the mapping between experiment-token and tenant id
     :returns  200 but no body
     """
-    if check_auth_header(request.headers):
+    if not check_auth_header(request.headers):
+        raise bottle.HTTPError(403, "Auth-Secret error!")
+    else:
         if _experiments.pop(token, None) is None:
             response.status = 404
             msg = "Experiment not found!"
@@ -248,9 +254,6 @@ def delete_handler(token):
         logger.debug(msg)
         response.headers['Content-Type'] = 'application/json'
         return json.dumps({"msg": msg})
-
-    else:
-        raise bottle.HTTPError(403, "Auth-Secret error!")
 
 
 # ######### static files
@@ -402,10 +405,6 @@ def start(config: configparser.ConfigParser):
     except Exception as e:
         logger.error("state file not writable!!: %s" % e)
         exit(0)
-
-    # if len(_experiments) == 0:
-    #    logger.info("adding testing experiment (%s) to list of experiments" % 'test01')
-    #    _experiments["test01"] = {"tenant": "123invalid456", "flow_tables": 300}
 
     _SdnFilter = OpenSdnCoreFilter(_knowledgebase)
     for k, v in _experiments.items():
