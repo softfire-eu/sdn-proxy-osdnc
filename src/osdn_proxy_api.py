@@ -8,7 +8,7 @@ import bottle
 import requests
 from bottle import post, get, delete, route
 from bottle import request, response
-from ofsctl import ofsctl
+from ofsctl import ofsctl, ofs_json
 
 import utils
 from KnowledgeBase import KnowledgeBase, TenantKnowledgeBase
@@ -175,12 +175,24 @@ def proxy_creation_handler():
 
 @get('/ofsctl_list_tenants')
 @get('/ofsctl_del_tenant/<delid>')
+@delete('/RemoveTenant/<delid>')
 def handle_ofsctl_list_tenants(delid=None):
     if not check_auth_header(request.headers):
         raise bottle.HTTPError(403, "Auth-Secret error!")
     ofsdb = ofsctl.get_db()
+    dellist = []
     if delid:
+        for ex, v in _experiments.items():
+            tid = v.get("tenant", None)
+            if tid == delid:
+                dellist.append(ex)
+            if len(dellist) > 0:
+                for exp in dellist:
+                    delete_experiment(exp)
         logger.info("deleting tenant %d from ofsDB..")
+        # TODO: clean flow_tables before delete
+        #for flow_table_id
+        #ofs_json.del_flow_table("0x000000001", 100010, flow_table_id)
         ofsdb.del_tenant(delid)
     logger.info("listing tenants from ofsDB")
     tenants = ofsdb.list_tenants()
@@ -244,16 +256,21 @@ def delete_handler(token):
     if not check_auth_header(request.headers):
         raise bottle.HTTPError(403, "Auth-Secret error!")
     else:
-        if _experiments.pop(token, None) is None:
-            response.status = 404
-            msg = "Experiment not found!"
-        else:
-            response.status = 200
-            msg = "Experiment successfully deleted!"
-            utils.store_experiments(_experiments)
+        status, msg = delete_experiment(token)
         logger.debug(msg)
         response.headers['Content-Type'] = 'application/json'
         return json.dumps({"msg": msg})
+
+
+def delete_experiment(experimentid):
+    if _experiments.pop(experimentid, None) is None:
+        status = 404
+        msg = "Experiment not found!"
+    else:
+        status = 200
+        msg = "Experiment successfully deleted!"
+        utils.store_experiments(_experiments)
+    return status, msg
 
 
 # ######### static files
