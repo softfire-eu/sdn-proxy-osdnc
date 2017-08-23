@@ -191,6 +191,10 @@ def handle_ofsctl_list_tenants(delid=None):
                     delete_experiment(exp)
         logger.info("deleting tenant %d from ofsDB..")
         # TODO: clean flow_tables before delete
+        flowlist = get_user_flowtables(delid)
+        if len(flowlist) > 0:
+            for table in flowlist:
+                ofsctl.delete_flow_table(table)
         #for flow_table_id
         #ofs_json.del_flow_table("0x000000001", 100010, flow_table_id)
         ofsdb.del_tenant(delid)
