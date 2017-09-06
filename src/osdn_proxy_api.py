@@ -8,7 +8,7 @@ import bottle
 import requests
 from bottle import post, get, delete, route
 from bottle import request, response
-from ofsctl import ofsctl, ofs_json
+from ofsctl import ofsctl, ofs_json, db
 
 import utils
 from KnowledgeBase import KnowledgeBase, TenantKnowledgeBase
@@ -23,6 +23,7 @@ _experiments = dict()
 _auth_secret = "secret"
 _api_endpoint = "http://127.0.0.1:8001/"
 _osdnc_api = "http://192.168.41.153:10010/"
+_opensdncore_dpid = "0000000000000001"
 _SdnFilter = SdnFilter()
 _number_of_tables_per_tenant = 3
 _knowledgebase = KnowledgeBase()
@@ -190,13 +191,11 @@ def handle_ofsctl_list_tenants(delid=None):
                 for exp in dellist:
                     delete_experiment(exp)
         logger.info("deleting tenant %d from ofsDB..")
-        # TODO: clean flow_tables before delete
         flowlist = get_user_flowtables(delid)
+        cport = db.ofs_db.get_console_port_from_br(ofsdb, _opensdncore_dpid)
         if len(flowlist) > 0:
-            for table in flowlist:
-                ofsctl.delete_flow_table(table)
-        #for flow_table_id
-        #ofs_json.del_flow_table("0x000000001", 100010, flow_table_id)
+            for flow_table_id in flowlist:
+                ofs_json.del_flow_table(_opensdncore_dpid, cport, flow_table_id)
         ofsdb.del_tenant(delid)
     logger.info("listing tenants from ofsDB")
     tenants = ofsdb.list_tenants()
