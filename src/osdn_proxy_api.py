@@ -52,6 +52,21 @@ def get_user_flowtables(tenant_id):
 def get_next_os_table_offset(max_of_table_ofs):
     if max_of_table_ofs + _number_of_tables_per_tenant < (254 - _number_of_tables_per_tenant):
         return max_of_table_ofs + _number_of_tables_per_tenant
+    else:
+        logger.error("number of flow tables exhaust!")
+
+
+def get_next_os_table_offset_from_list(table_list: list):
+    table_list.extend(range(0, 8))
+    table_list.sort()
+    if 250 not in table_list:
+        table_list.append(250)
+    last = None
+    for value in table_list:
+        if last and value > last:
+            if value - last >= 2 * _number_of_tables_per_tenant:
+                return last + _number_of_tables_per_tenant
+        last = value
 
 
 def find_next_os_table_offset(list_of_of_table_ofs):
@@ -83,11 +98,13 @@ def proxy_prepare_tenant():
 
             ofsdb = ofsctl.get_db()
             tenants = ofsdb.list_tenants()
+            table_ofs_list = list()
             max_of_table = 0
             flow_table_offset = None
             for tenant, flow in tenants:
                 logger.debug("proxy_prepare_tenant: OFSdb(tenant: %s of_table_ofs: %s)" % (tenant, flow))
                 flow = int(flow)
+                table_ofs_list.append(flow)
                 if max_of_table < flow:
                     max_of_table = flow
                 if tenant == tenant_id:
@@ -96,10 +113,15 @@ def proxy_prepare_tenant():
             logger.debug("proxy_prepare_tenant: max_flowt: %d" % (max_of_table))
             if flow_table_offset is None:
                 # create new entry
-                next_os_table_offset = get_next_os_table_offset(max_of_table)
-                logger.info("proxy_prepare_tenant: creating a new tenant in ofsDB with ofs: %d" % next_os_table_offset)
-                ofsdb.add_tenant(tenant_id, next_os_table_offset)
-                flow_table_offset = int(ofsdb.get_of_start_table_from_tenant(tenant_id)[0][0])
+                next_os_table_offset = get_next_os_table_offset_from_list(table_ofs_list)
+                if next_os_table_offset:
+                    logger.info(
+                        "proxy_prepare_tenant: creating a new tenant in ofsDB with ofs: %d" % next_os_table_offset)
+                    ofsdb.add_tenant(tenant_id, next_os_table_offset)
+                    flow_table_offset = int(ofsdb.get_of_start_table_from_tenant(tenant_id)[0][0])
+                else:
+                    logger.error("proxy_prepare_tenant: cant get next free flowtable...")
+                    return bottle.HTTPError(500, "can't get next free flow table")
 
         except Exception as e:
             logger.error(e)
