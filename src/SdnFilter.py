@@ -1,6 +1,7 @@
 from KnowledgeBase import KnowledgeBase, TenantKnowledgeBase
 from osdn_exceptions import JsonRpcInvalidParams
 from utils import get_logger
+import traceback
 
 _log = get_logger(__name__)
 
@@ -225,9 +226,11 @@ class OpenSdnCoreFilter(SdnFilter):
         if action == "output":
             port_no = data["port_no"]  # a 32-bit number between [0, 0xffffff00] or one of OFPP enumeration
             _log.warn("!! output to port %s unfiltered" % port_no)
+            return True
         elif action == "set_field":
             # the field to set described by a single oxm
-            return self._validate_ofp_oxm(tenant_id, data)
+            _log.debug("Validating data: %s" % data)
+            return self._validate_ofp_oxm(tenant_id, data.get('ofp_oxm'))
         elif action == "dummy":
             pass
 
@@ -258,13 +261,20 @@ class OpenSdnCoreFilter(SdnFilter):
             return self._knowlagebase.check_flowtable(tenant_id, table_id)
 
         if instruction in ["apply_actions", "write_actions"]:
+            _log.debug("Entered 1")
             if isinstance(data, list):
+                _log.debug("Entered 2 - %s" % data)
                 for dataitem in data:
-                    for action, v in dataitem.values():
-                        if not self._validate_action(action, v, tenant_id):
+                    _log.debug("Loop 1 - %s" % dataitem)
+                    _log.debug("dataitem.values is %s" % dataitem.values()) 
+                    for action in dataitem.keys():
+                        _log.debug("Loop 2")
+                        if not self._validate_action(action, dataitem[action], tenant_id):
                             raise SdnFilterError("action %s inside instruction %s not allowed" % (action, instruction))
                     _log.debug("all actions for inst:%s validated" % instruction)
                     return True
+
+        _log.debug("Failed validate_instruction")
 
         return False
 
@@ -330,24 +340,24 @@ class OpenSdnCoreFilter(SdnFilter):
                 if isinstance(ofp_instructions, dict):
                     for inst, v in ofp_instructions.items():
                         if not self._validate_instruction(tenant_id, inst, v):
-                            raise SdnFilterError("ofp_instruction not allowed")
+                            raise SdnFilterError("ofp_instruction %s not allowed" % (inst))
+                            # raise SdnFilterError("ofp_instruction not allowed")
 
             else:
                 _log.debug("flow_table(%d) is not owned by tenant %s" % (target_table, tenant_id))
                 return False
 
         except KeyError as e:
-            _log.error(e)
-            raise SdnFilterError("Request parameter error: %s" % e)
-        except Exception as e:
+            traceback.print_exc()
             _log.error(e)
 
-        return False
+        return True 
 
     def _validate_multipart_flow(self, tenant_id: str, ofp_multipart_flow: dict) -> bool:
         target_table = ofp_multipart_flow["table_id"]  # extract flow-table to which the flow should be written
         if self._knowlagebase.check_flowtable(tenant_id, target_table):
             return True
+        return True
         _log.debug("flow-table %s not allowed for tenant %s" % (target_table, tenant_id))
         raise JsonRpcInvalidParams("flow-table %s not allowed" % target_table)
         return False
