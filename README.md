@@ -6,6 +6,8 @@
 
 # sdn-proxy-osdnc
 
+API Proxy to add Multi user capabilities to OpenSDNCore API
+
 
 ## Technical Requirements
 
