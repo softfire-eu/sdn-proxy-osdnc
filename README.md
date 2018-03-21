@@ -1,7 +1,7 @@
 
   <img src="https://www.softfire.eu/wp-content/uploads/SoftFIRE_Logo_Fireball-300x300.png" width="120"/>
 
-  Copyright © 2016-2018 [SoftFIRE](https://www.softfire.eu/) and [TU Berlin](http://www.av.tu-berlin.de/next_generation_networks/).
+  Copyright © 2016-2018 [SoftFIRE](https://www.softfire.eu/) and [Fraunhofer FOKUS](https://www.fokus.fraunhofer.de/go/ngni).
   Licensed under [Apache v2 License](http://www.apache.org/licenses/LICENSE-2.0).
 
 # sdn-proxy-osdnc
@@ -11,9 +11,16 @@ API Proxy to add Multi user capabilities to OpenSDNCore API
 
 ## Technical Requirements
 
+ * An OpenStack installation with the OpenSDNcore add-on which replaces the vSwitch with the OpenSDNcore OpenFlow Switch
+ * An OpenSDNcore SDN controller installed on the Network Node of the OpensStack Cluster
+ * For OpenSDNcore a license is required from Fraunhofer FOKUS
+ * ofsctl python API from Fraunhofer FOKUS
 
 ## Installation and configuration
 
+ * install `ofsctl`, `requests`, `bottle` python modules
+ * place `sdn-proxy.ini` into `/etc/` and change the default values to your needs
+ * run `./sdn-proxy`
 
 ## Issue tracker
 
